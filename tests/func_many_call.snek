@@ -1,0 +1,8 @@
+(fun (f x) (print (add1 x)))
+
+(print (f (print 
+        (let ((x 3) (y 5))
+            (+ x y)
+        )
+    ))
+)

@@ -1,0 +1,17 @@
+test func no arg
+
+test func three arg
+
+test func alignment
+
+test print
+
+test depth
+
+test func has input
+
+test duplicate func in_name
+
+test no func available
+
+test func name as id
