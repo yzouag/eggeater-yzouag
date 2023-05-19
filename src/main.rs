@@ -35,6 +35,7 @@ enum Reg {
     RBX,
     RCX, // store rdi
     AL,
+    R15,
 }
 
 #[derive(Debug)]
@@ -47,22 +48,19 @@ enum Instr {
     ITest(Val, Val),
     IXor(Val, Val),
     ICmp(Val, Val),
-    // ICmove(Val, Val),
     IAnd(Val, Val),
     ISar(Val, Val),
     INeg(Val),
     IJe(Val),
-    // IJg(Val),
-    // IJge(Val),
-    // IJl(Val),
-    // IJle(Val),
     ISete(Val),
     ISetg(Val),
     ISetge(Val),
     ISetl(Val),
     ISetle(Val),
-    // IJne(Val),
+    IJne(Val),
+    IJge(Val),
     IJo(Val),
+    IJz(Val),
     IJnz(Val),
     IJmp(Val),
     IPush(Val),
@@ -80,6 +78,7 @@ enum Op2 { Plus, Minus, Times, Equal, Greater, GreaterEqual, Less, LessEqual, }
 enum Expr {
     Number(i64),
     Boolean(bool),
+    Nil,
     Id(String),
     Let(Vec<(String, Expr)>, Box<Expr>),
     UnOp(Op1, Box<Expr>),
@@ -90,6 +89,9 @@ enum Expr {
     Set(String, Box<Expr>),
     Block(Vec<Expr>),
     Call(String, Vec<Expr>),
+    Index(Box<Expr>, Box<Expr>),
+    Tuple(Vec<Expr>),
+    SetIndex(Box<Expr>, Box<Expr>, Box<Expr>),
 }
 
 fn is_def(s: &Sexp) -> bool {
@@ -184,6 +186,7 @@ fn parse_expr(s: &Sexp) -> Expr {
             match s.as_str() {
                 "true" => Expr::Boolean(true),
                 "false" => Expr::Boolean(false),
+                "nil" => Expr::Nil,
                 "input" => Expr::Id("input".to_string()),
                 _ => {
                     if check_keyword(s) {
@@ -212,6 +215,18 @@ fn parse_expr(s: &Sexp) -> Expr {
                         panic!("Invalid block");
                     }
                     Expr::Block(rest.iter().map(|e| parse_expr(e)).collect())
+                },
+                [Sexp::Atom(S(keyword)), rest @ ..] if keyword == "tuple" => {
+                    if rest.len() == 0 {
+                        panic!("Invalid tuple");
+                    }
+                    Expr::Tuple(rest.iter().map(|e| parse_expr(e)).collect())
+                },
+                [Sexp::Atom(S(keyword)), tuple, index] if keyword == "index" => {
+                    Expr::Index(Box::new(parse_expr(tuple)), Box::new(parse_expr(index)))
+                },
+                [Sexp::Atom(S(keyword)), tuple, index, value] if keyword == "setindex!" => {
+                    Expr::SetIndex(Box::new(parse_expr(tuple)), Box::new(parse_expr(index)), Box::new(parse_expr(value)))
                 },
                 [Sexp::Atom(S(keyword)), e] if keyword == "loop" => Expr::Loop(Box::new(parse_expr(e))),
                 [Sexp::Atom(S(keyword)), e] if keyword == "break" => Expr::Break(Box::new(parse_expr(e))),
@@ -256,8 +271,8 @@ fn parse_bind(s: &Sexp) -> (String, Expr) {
 }
 
 fn check_keyword(s: &String) -> bool { // can we modify "input"?
-    if vec!["add1", "sub1", "let", "isnum", "isbool", "true", "input",
-     "false", "block", "loop", "break", "if", "set!", ].iter().any(|w| w == s) {
+    if vec!["add1", "sub1", "let", "isnum", "isbool", "true", "input", "false", "block",
+    "loop", "break", "if", "set!", "setindex!", "index", "tuple", "nil"].iter().any(|w| w == s) {
         return true;
     }
     false
@@ -285,11 +300,12 @@ fn compile_expr(ins: &mut Vec<Instr>, e: &Expr, si:i64, env: &HashMap<String, i6
         Expr::Number(n) => ins.push(Instr::IMov(Val::Reg(Reg::RAX), Val::Imm(*n<<1))),
         Expr::Boolean(b) => {
             if *b {
-                ins.push(Instr::IMov(Val::Reg(Reg::RAX), Val::Imm(3)));
+                ins.push(Instr::IMov(Val::Reg(Reg::RAX), Val::Imm(7)));
             } else {
-                ins.push(Instr::IMov(Val::Reg(Reg::RAX), Val::Imm(1)));
+                ins.push(Instr::IMov(Val::Reg(Reg::RAX), Val::Imm(3)));
             }
         },
+        Expr::Nil => ins.push(Instr::IMov(Val::Reg(Reg::RAX), Val::Imm(1))),
         Expr::Id(s) => {
             if s == "input" && is_main {
                 ins.push(Instr::IMov(Val::Reg(Reg::RAX), Val::Reg(Reg::RDI)));
@@ -334,15 +350,26 @@ fn compile_expr(ins: &mut Vec<Instr>, e: &Expr, si:i64, env: &HashMap<String, i6
                     check_overflow(ins);
                 },
                 Op1::IsBool => {
-                    ins.push(Instr::IAnd(Val::Reg(Reg::RAX), Val::Imm(1)));
-                    ins.push(Instr::IMul(Val::Reg(Reg::RAX), Val::Imm(2)));
-                    ins.push(Instr::IAdd(Val::Reg(Reg::RAX), Val::Imm(1)));
+                    let if_label = new_label(l, "isbool_if");
+                    let end_label = new_label(l, "isbool_end");
+                    // check last two digits 1
+                    ins.push(Instr::IAnd(Val::Reg(Reg::RAX), Val::Imm(3)));
+                    ins.push(Instr::ICmp(Val::Reg(Reg::RAX), Val::Imm(3)));
+                    ins.push(Instr::IJe(Val::Label(if_label.to_string())));
+                    // not boolean (!=3)
+                    ins.push(Instr::IMov(Val::Reg(Reg::RAX), Val::Imm(3))); // false
+                    ins.push(Instr::IJmp(Val::Label(end_label.to_string())));
+                    // is boolean
+                    ins.push(Instr::Label(if_label.to_string()));
+                    ins.push(Instr::IMov(Val::Reg(Reg::RAX), Val::Imm(7))); // true
+                    // end
+                    ins.push(Instr::Label(end_label));
                 },
                 Op1::IsNum => {
                     ins.push(Instr::IAnd(Val::Reg(Reg::RAX), Val::Imm(1)));
                     ins.push(Instr::IXor(Val::Reg(Reg::RAX), Val::Imm(1)));
-                    ins.push(Instr::IMul(Val::Reg(Reg::RAX), Val::Imm(2)));
-                    ins.push(Instr::IAdd(Val::Reg(Reg::RAX), Val::Imm(1)));
+                    ins.push(Instr::IMul(Val::Reg(Reg::RAX), Val::Imm(4)));
+                    ins.push(Instr::IAdd(Val::Reg(Reg::RAX), Val::Imm(3)));
                 },
                 Op1::Print => {
                     ins.push(Instr::IPush(Val::Reg(Reg::RDI)));
@@ -354,21 +381,30 @@ fn compile_expr(ins: &mut Vec<Instr>, e: &Expr, si:i64, env: &HashMap<String, i6
         },
         Expr::BinOp(op2, subexpr1, subexpr2) => {
             if matches!(op2, Op2::Equal) {
+                let compare_label = new_label(l, "equal_compare");
                 compile_expr(ins, subexpr1, si, env, brake, l, is_main, func_table);
                 ins.push(Instr::IMov(Val::RegOffset(Reg::RSP, si*8), Val::Reg(Reg::RAX)));
                 compile_expr(ins, subexpr2, si+1, env, brake, l, is_main, func_table);
-                // check type error
+                // check last bit is same
                 ins.push(Instr::IMov(Val::Reg(Reg::RBX), Val::Reg(Reg::RAX)));
                 ins.push(Instr::IXor(Val::Reg(Reg::RBX), Val::RegOffset(Reg::RSP, si*8)));
                 ins.push(Instr::ITest(Val::Reg(Reg::RBX), Val::Imm(1)));
                 ins.push(Instr::IMov(Val::Reg(Reg::RCX), Val::Imm(3)));
                 ins.push(Instr::IJnz(Val::Label("throw_error".to_string())));
+                // if last bit 0, go to compare
+                ins.push(Instr::ITest(Val::Reg(Reg::RAX), Val::Imm(1)));
+                ins.push(Instr::IJz(Val::Label(compare_label.to_string())));
+                // if last bit 1, check second last bit
+                ins.push(Instr::ISar(Val::Reg(Reg::RBX), Val::Imm(1)));
+                ins.push(Instr::ITest(Val::Reg(Reg::RBX), Val::Imm(1)));
+                ins.push(Instr::IJnz(Val::Label("throw_error".to_string())));
                 // compare
+                ins.push(Instr::Label(compare_label));
                 ins.push(Instr::ICmp(Val::Reg(Reg::RAX), Val::RegOffset(Reg::RSP, si*8)));
                 ins.push(Instr::IMov(Val::Reg(Reg::RAX), Val::Imm(0)));       
                 ins.push(Instr::ISete(Val::Reg(Reg::AL)));
-                ins.push(Instr::IMul(Val::Reg(Reg::RAX), Val::Imm(2)));
-                ins.push(Instr::IAdd(Val::Reg(Reg::RAX), Val::Imm(1)));       
+                ins.push(Instr::IMul(Val::Reg(Reg::RAX), Val::Imm(4)));
+                ins.push(Instr::IAdd(Val::Reg(Reg::RAX), Val::Imm(3)));       
             } else {
                 compile_expr(ins, subexpr1, si, env, brake, l, is_main, func_table);
                 check_type(ins);
@@ -402,8 +438,8 @@ fn compile_expr(ins: &mut Vec<Instr>, e: &Expr, si:i64, env: &HashMap<String, i6
                         } else if matches!(op2, Op2::LessEqual) {
                             ins.push(Instr::ISetle(Val::Reg(Reg::AL)));
                         }
-                        ins.push(Instr::IMul(Val::Reg(Reg::RAX), Val::Imm(2)));
-                        ins.push(Instr::IAdd(Val::Reg(Reg::RAX), Val::Imm(1)));
+                        ins.push(Instr::IMul(Val::Reg(Reg::RAX), Val::Imm(4)));
+                        ins.push(Instr::IAdd(Val::Reg(Reg::RAX), Val::Imm(3)));
                     }
                 }
             }
@@ -432,7 +468,7 @@ fn compile_expr(ins: &mut Vec<Instr>, e: &Expr, si:i64, env: &HashMap<String, i6
             let end_label = new_label(l, "ifend");
             let else_label = new_label(l, "ifelse");
             compile_expr(ins, iff, si, env, brake, l, is_main, func_table);
-            ins.push(Instr::ICmp(Val::Reg(Reg::RAX), Val::Imm(1)));
+            ins.push(Instr::ICmp(Val::Reg(Reg::RAX), Val::Imm(3)));
             ins.push(Instr::IJe(Val::Label(String::from(&else_label))));
             compile_expr(ins, thnn, si, env, brake, l, is_main, func_table);
             ins.push(Instr::IJmp(Val::Label(String::from(&end_label))));
@@ -490,6 +526,88 @@ fn compile_expr(ins: &mut Vec<Instr>, e: &Expr, si:i64, env: &HashMap<String, i6
             ins.push(Instr::IMov(Val::Reg(Reg::RDI), Val::RegOffset(Reg::RSP, num_args*8)));
             // recover stack pointer
             ins.push(Instr::IAdd(Val::Reg(Reg::RSP), Val::Imm(offset)));
+        },
+        Expr::Tuple(elements) => {
+            let num_elements = elements.len() as i64;
+            let mut current = 0;
+            // evaluate each element and put on stack
+            for ele in elements {
+                compile_expr(ins, ele, si+current, env, brake, l, is_main, func_table);
+                if current == num_elements-1 {
+                    break;
+                }
+                let current_word = (si+current)*8;
+                ins.push(Instr::IMov(Val::RegOffset(Reg::RSP, current_word), Val::Reg(Reg::RAX)));
+                current += 1;
+            }
+            // move elements to heap
+            ins.push(Instr::IMov(Val::RegOffset(Reg::R15, num_elements*8), Val::Reg(Reg::RAX)));
+            for i in 1..num_elements {
+                ins.push(Instr::IMov(Val::Reg(Reg::RAX), Val::RegOffset(Reg::RSP, (si+i)*8)));
+                ins.push(Instr::IMov(Val::RegOffset(Reg::R15, i*8), Val::Reg(Reg::RAX)));
+            }
+            // put tuple length as first element of tuple
+            ins.push(Instr::IMov(Val::RegOffset(Reg::R15, 0), Val::Imm(num_elements)));
+            // move tuple address to rax and +1 for address type
+            ins.push(Instr::IMov(Val::Reg(Reg::RAX), Val::Reg(Reg::R15)));
+            ins.push(Instr::IAdd(Val::Reg(Reg::R15), Val::Imm(1)));
+            // update r15
+            ins.push(Instr::IAdd(Val::Reg(Reg::R15), Val::Imm((num_elements+1)*8)));
+        },
+        Expr::Index(tuple, index) => {
+            // compile tuple and check type, store it on stack
+            compile_expr(ins, tuple, si, env, brake, l, is_main, func_table);
+            ins.push(Instr::IMov(Val::Reg(Reg::RBX), Val::Reg(Reg::RAX)));
+            ins.push(Instr::IAnd(Val::Reg(Reg::RBX), Val::Imm(111)));
+            ins.push(Instr::ICmp(Val::Reg(Reg::RBX), Val::Imm(1)));
+            ins.push(Instr::IMov(Val::Reg(Reg::RCX), Val::Imm(3)));
+            ins.push(Instr::IJne(Val::Label("throw_error".to_string())));
+            ins.push(Instr::ISub(Val::Reg(Reg::RAX), Val::Imm(1)));
+            ins.push(Instr::IMov(Val::RegOffset(Reg::RSP, si*8), Val::Reg(Reg::RAX)));
+            // compile index and check type, store in RAX
+            compile_expr(ins, index, si+1, env, brake, l, is_main, func_table);
+            check_type(ins);
+            // put tuple address on RBX
+            ins.push(Instr::IMov(Val::Reg(Reg::RBX), Val::RegOffset(Reg::RSP, si*8)));
+            // check index out of range
+            ins.push(Instr::ICmp(Val::Reg(Reg::RAX), Val::RegOffset(Reg::RBX, 0)));
+            ins.push(Instr::IMov(Val::Reg(Reg::RCX), Val::Imm(8)));
+            ins.push(Instr::IJge(Val::Label("throw_error".to_string())));
+            // put element into rax
+            ins.push(Instr::IAdd(Val::Reg(Reg::RAX), Val::Imm(1)));
+            ins.push(Instr::IMul(Val::Reg(Reg::RAX), Val::Imm(8)));
+            ins.push(Instr::IAdd(Val::Reg(Reg::RBX), Val::Reg(Reg::RAX)));
+            ins.push(Instr::IMov(Val::Reg(Reg::RAX), Val::RegOffset(Reg::RBX, 0)));
+        },
+        Expr::SetIndex(tuple, index, value) => {
+            // compile tuple and check type, store it on stack
+            compile_expr(ins, tuple, si, env, brake, l, is_main, func_table);
+            ins.push(Instr::IMov(Val::Reg(Reg::RBX), Val::Reg(Reg::RAX)));
+            ins.push(Instr::IAnd(Val::Reg(Reg::RBX), Val::Imm(111)));
+            ins.push(Instr::ICmp(Val::Reg(Reg::RBX), Val::Imm(1)));
+            ins.push(Instr::IMov(Val::Reg(Reg::RCX), Val::Imm(3)));
+            ins.push(Instr::IJne(Val::Label("throw_error".to_string())));
+            ins.push(Instr::ISub(Val::Reg(Reg::RAX), Val::Imm(1)));
+            ins.push(Instr::IMov(Val::RegOffset(Reg::RSP, si*8), Val::Reg(Reg::RAX)));
+            // compile index and check type
+            compile_expr(ins, index, si+1, env, brake, l, is_main, func_table);
+            check_type(ins);
+            // check index out of range
+            ins.push(Instr::IMov(Val::Reg(Reg::RBX), Val::RegOffset(Reg::RSP, si*8)));
+            ins.push(Instr::ICmp(Val::Reg(Reg::RAX), Val::RegOffset(Reg::RBX, 0)));
+            ins.push(Instr::IMov(Val::Reg(Reg::RCX), Val::Imm(8)));
+            ins.push(Instr::IJge(Val::Label("throw_error".to_string())));
+            ins.push(Instr::IMov(Val::RegOffset(Reg::RSP, (si+1)*8), Val::Reg(Reg::RAX)));
+            // compile value
+            compile_expr(ins, value, si+2, env, brake, l, is_main, func_table);
+            // RAX = value, RBX = tuple address, RCX = index
+            ins.push(Instr::IMov(Val::Reg(Reg::RBX), Val::RegOffset(Reg::RSP, si*8)));
+            ins.push(Instr::IMov(Val::Reg(Reg::RCX), Val::RegOffset(Reg::RSP, (si+1)*8)));
+            ins.push(Instr::IAdd(Val::Reg(Reg::RCX), Val::Imm(1)));
+            ins.push(Instr::IMul(Val::Reg(Reg::RCX), Val::Imm(8)));
+            ins.push(Instr::IAdd(Val::Reg(Reg::RCX), Val::Reg(Reg::RBX)));
+            ins.push(Instr::IMov(Val::RegOffset(Reg::RCX, 0), Val::Reg(Reg::RAX)));
+            ins.push(Instr::IMov(Val::Reg(Reg::RAX), Val::Reg(Reg::RBX)));
         }
     }
 }
@@ -504,7 +622,7 @@ fn aligned_depth(e: &Expr, args: i64) -> i64 {
 
 fn depth(e: &Expr) -> i64 {
     match e {
-        Expr::Number(_) | Expr::Boolean(_) | Expr::Id(_) => 0,
+        Expr::Number(_) | Expr::Boolean(_) | Expr::Id(_) | Expr::Nil => 0,
         Expr::Loop(expr) | Expr:: Break(expr) | Expr::Set(_, expr) |
             Expr::UnOp(_, expr) => depth(expr),
         Expr::BinOp(_, e1, e2) => depth(e1).max(depth(e2) + 1),
@@ -528,6 +646,18 @@ fn depth(e: &Expr) -> i64 {
             }
             max_depth
         },
+        Expr::Tuple(elements) => {
+            let mut current = 0;
+            let mut max_depth = 0;
+            for e in elements {
+                max_depth = max_depth.max(depth(e)+current);
+                current += 1;
+            }
+            max_depth
+        },
+        Expr::Index(tuple, index) => depth(tuple).max(depth(index)+1), // NOTE: should not +1?
+        Expr::SetIndex(tuple, index, value) => 
+            depth(tuple).max(depth(index)+1).max(depth(value)+2), // should we plus 1??
     }
 }
 
@@ -554,9 +684,6 @@ fn instr_to_str(i: &Instr) -> String {
         Instr::ICmp(v1, v2) => {
             format!("\ncmp {}, {}", val_to_str(v1), val_to_str(v2))
         },
-        // Instr::ICmove(v1, v2) => {
-            //     format!("\ncmove {}, {}", val_to_str(v1), val_to_str(v2))
-        // },
         Instr::IAnd(v1, v2) => {
             format!("\nand {}, {}", val_to_str(v1), val_to_str(v2))
         },
@@ -569,11 +696,17 @@ fn instr_to_str(i: &Instr) -> String {
         Instr::IJe(v) => {
             format!("\nje {}", val_to_str(v))
         },
-        // Instr::IJne(v) => {
-            //     format!("\njne {}", val_to_str(v))
-            // },
+        Instr::IJne(v) => {
+            format!("\njne {}", val_to_str(v))
+        },
+        Instr::IJge(v) => {
+            format!("\njge {}", val_to_str(v))
+        },
         Instr::IJo(v) => {
             format!("\njo {}", val_to_str(v))
+        },
+        Instr::IJz(v) => {
+            format!("\njz {}", val_to_str(v))
         },
         Instr::IJnz(v) => {
             format!("\njnz {}", val_to_str(v))
@@ -619,8 +752,10 @@ fn val_to_str(v: &Val) -> String {
         Val::Reg(Reg::RBX) => "rbx".to_string(),
         Val::Reg(Reg::RCX) => "rcx".to_string(),
         Val::Reg(Reg::AL) => "al".to_string(),
+        Val::Reg(Reg::R15) => "r15".to_string(),
         Val::Imm(n) => n.to_string(),
         Val::RegOffset(Reg::RSP, offset) => format!("[rsp+{}]", offset),
+        Val::RegOffset(Reg::R15, offset) => format!("[r15+{}]", offset),
         Val::Label(s) => s.to_string(),
         _ => panic!("not a valid Val"),
     }
@@ -717,6 +852,7 @@ throw_error:
   ret
 {}
 our_code_starts_here:
+  mov r15, rsi
   {}
   ret
 ",
