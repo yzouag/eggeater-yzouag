@@ -37,16 +37,18 @@ fn snek_str(val: i64, seen: &mut Vec<i64>) -> String {
     } else if val == 1 {
         "nil".to_string()
     } else if val & 1 == 1 {
-        if seen.contains(&val)  { return "(list <cyclic>)".to_string() }
+        if seen.contains(&val)  { return "(...)".to_string() }
         seen.push(val);
         let addr = (val - 1) as *const i64;
         let length = unsafe { *addr };
-        let mut list_string = String::from("(list");
-        for i in 1..length+1 {
+        let mut list_string = String::from("(");
+        for i in 1..length {
             let element_addr = unsafe { *addr.offset(i as isize) };
-            list_string.push(' ');
             list_string.push_str(&snek_str(element_addr, seen));
+            list_string.push_str(", ");
         }
+        let element_addr = unsafe { *addr.offset(length as isize) };
+        list_string.push_str(&snek_str(element_addr, seen));
         list_string.push(')');
         seen.pop();
         list_string

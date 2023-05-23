@@ -1,0 +1,28 @@
+(block
+    (let (
+            (m (tuple 2 4 nil false))
+            (n (tuple m 2 3))
+        )
+        (block
+            (print m)
+            (print n)
+            (setindex! m (+ 1 1) n)
+            (print m)
+            (print n)
+        )
+    )
+    (let (
+            (m (tuple 2 4 nil (tuple false 2 (tuple nil) 5)))
+        )
+        (print (index (index (index m 3) 2) 0))
+    )
+    (let (
+        (m (tuple (= true false) (= 2 8)))
+        (n (tuple (= 3 8)))
+     )
+        (block
+            (print (= m m))
+            (= m n)
+        )
+    )
+)

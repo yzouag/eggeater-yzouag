@@ -58,6 +58,7 @@ enum Instr {
     ISetl(Val),
     ISetle(Val),
     IJne(Val),
+    IJl(Val),
     IJge(Val),
     IJo(Val),
     IJz(Val),
@@ -395,8 +396,7 @@ fn compile_expr(ins: &mut Vec<Instr>, e: &Expr, si:i64, env: &HashMap<String, i6
                 ins.push(Instr::ITest(Val::Reg(Reg::RAX), Val::Imm(1)));
                 ins.push(Instr::IJz(Val::Label(compare_label.to_string())));
                 // if last bit 1, check second last bit
-                ins.push(Instr::ISar(Val::Reg(Reg::RBX), Val::Imm(1)));
-                ins.push(Instr::ITest(Val::Reg(Reg::RBX), Val::Imm(1)));
+                ins.push(Instr::ITest(Val::Reg(Reg::RBX), Val::Imm(3)));
                 ins.push(Instr::IJnz(Val::Label("throw_error".to_string())));
                 // compare
                 ins.push(Instr::Label(compare_label));
@@ -543,22 +543,24 @@ fn compile_expr(ins: &mut Vec<Instr>, e: &Expr, si:i64, env: &HashMap<String, i6
             // move elements to heap
             ins.push(Instr::IMov(Val::RegOffset(Reg::R15, num_elements*8), Val::Reg(Reg::RAX)));
             for i in 1..num_elements {
-                ins.push(Instr::IMov(Val::Reg(Reg::RAX), Val::RegOffset(Reg::RSP, (si+i)*8)));
+                ins.push(Instr::IMov(Val::Reg(Reg::RAX), Val::RegOffset(Reg::RSP, (si+i-1)*8)));
                 ins.push(Instr::IMov(Val::RegOffset(Reg::R15, i*8), Val::Reg(Reg::RAX)));
             }
             // put tuple length as first element of tuple
-            ins.push(Instr::IMov(Val::RegOffset(Reg::R15, 0), Val::Imm(num_elements)));
+            ins.push(Instr::IMov(Val::Reg(Reg::RBX), Val::Imm(num_elements)));
+            ins.push(Instr::IMov(Val::RegOffset(Reg::R15, 0), Val::Reg(Reg::RBX)));
             // move tuple address to rax and +1 for address type
             ins.push(Instr::IMov(Val::Reg(Reg::RAX), Val::Reg(Reg::R15)));
-            ins.push(Instr::IAdd(Val::Reg(Reg::R15), Val::Imm(1)));
+            ins.push(Instr::IAdd(Val::Reg(Reg::RAX), Val::Imm(1)));
             // update r15
             ins.push(Instr::IAdd(Val::Reg(Reg::R15), Val::Imm((num_elements+1)*8)));
         },
         Expr::Index(tuple, index) => {
-            // compile tuple and check type, store it on stack
+            // compile tuple
             compile_expr(ins, tuple, si, env, brake, l, is_main, func_table);
+            // check tuple type
             ins.push(Instr::IMov(Val::Reg(Reg::RBX), Val::Reg(Reg::RAX)));
-            ins.push(Instr::IAnd(Val::Reg(Reg::RBX), Val::Imm(111)));
+            ins.push(Instr::IAnd(Val::Reg(Reg::RBX), Val::Imm(7)));
             ins.push(Instr::ICmp(Val::Reg(Reg::RBX), Val::Imm(1)));
             ins.push(Instr::IMov(Val::Reg(Reg::RCX), Val::Imm(3)));
             ins.push(Instr::IJne(Val::Label("throw_error".to_string())));
@@ -567,12 +569,16 @@ fn compile_expr(ins: &mut Vec<Instr>, e: &Expr, si:i64, env: &HashMap<String, i6
             // compile index and check type, store in RAX
             compile_expr(ins, index, si+1, env, brake, l, is_main, func_table);
             check_type(ins);
+            ins.push(Instr::ISar(Val::Reg(Reg::RAX), Val::Imm(1)));
             // put tuple address on RBX
             ins.push(Instr::IMov(Val::Reg(Reg::RBX), Val::RegOffset(Reg::RSP, si*8)));
-            // check index out of range
+            // check index out of range < 0, >= length
             ins.push(Instr::ICmp(Val::Reg(Reg::RAX), Val::RegOffset(Reg::RBX, 0)));
             ins.push(Instr::IMov(Val::Reg(Reg::RCX), Val::Imm(8)));
             ins.push(Instr::IJge(Val::Label("throw_error".to_string())));
+            ins.push(Instr::ICmp(Val::Reg(Reg::RAX), Val::Imm(0)));
+            ins.push(Instr::IMov(Val::Reg(Reg::RCX), Val::Imm(8)));
+            ins.push(Instr::IJl(Val::Label("throw_error".to_string())));
             // put element into rax
             ins.push(Instr::IAdd(Val::Reg(Reg::RAX), Val::Imm(1)));
             ins.push(Instr::IMul(Val::Reg(Reg::RAX), Val::Imm(8)));
@@ -583,7 +589,7 @@ fn compile_expr(ins: &mut Vec<Instr>, e: &Expr, si:i64, env: &HashMap<String, i6
             // compile tuple and check type, store it on stack
             compile_expr(ins, tuple, si, env, brake, l, is_main, func_table);
             ins.push(Instr::IMov(Val::Reg(Reg::RBX), Val::Reg(Reg::RAX)));
-            ins.push(Instr::IAnd(Val::Reg(Reg::RBX), Val::Imm(111)));
+            ins.push(Instr::IAnd(Val::Reg(Reg::RBX), Val::Imm(7)));
             ins.push(Instr::ICmp(Val::Reg(Reg::RBX), Val::Imm(1)));
             ins.push(Instr::IMov(Val::Reg(Reg::RCX), Val::Imm(3)));
             ins.push(Instr::IJne(Val::Label("throw_error".to_string())));
@@ -592,11 +598,15 @@ fn compile_expr(ins: &mut Vec<Instr>, e: &Expr, si:i64, env: &HashMap<String, i6
             // compile index and check type
             compile_expr(ins, index, si+1, env, brake, l, is_main, func_table);
             check_type(ins);
+            ins.push(Instr::ISar(Val::Reg(Reg::RAX), Val::Imm(1)));
             // check index out of range
             ins.push(Instr::IMov(Val::Reg(Reg::RBX), Val::RegOffset(Reg::RSP, si*8)));
             ins.push(Instr::ICmp(Val::Reg(Reg::RAX), Val::RegOffset(Reg::RBX, 0)));
             ins.push(Instr::IMov(Val::Reg(Reg::RCX), Val::Imm(8)));
             ins.push(Instr::IJge(Val::Label("throw_error".to_string())));
+            ins.push(Instr::ICmp(Val::Reg(Reg::RAX), Val::Imm(0)));
+            ins.push(Instr::IMov(Val::Reg(Reg::RCX), Val::Imm(8)));
+            ins.push(Instr::IJl(Val::Label("throw_error".to_string())));
             ins.push(Instr::IMov(Val::RegOffset(Reg::RSP, (si+1)*8), Val::Reg(Reg::RAX)));
             // compile value
             compile_expr(ins, value, si+2, env, brake, l, is_main, func_table);
@@ -608,6 +618,7 @@ fn compile_expr(ins: &mut Vec<Instr>, e: &Expr, si:i64, env: &HashMap<String, i6
             ins.push(Instr::IAdd(Val::Reg(Reg::RCX), Val::Reg(Reg::RBX)));
             ins.push(Instr::IMov(Val::RegOffset(Reg::RCX, 0), Val::Reg(Reg::RAX)));
             ins.push(Instr::IMov(Val::Reg(Reg::RAX), Val::Reg(Reg::RBX)));
+            ins.push(Instr::IAdd(Val::Reg(Reg::RAX), Val::Imm(1)));
         }
     }
 }
@@ -699,6 +710,9 @@ fn instr_to_str(i: &Instr) -> String {
         Instr::IJne(v) => {
             format!("\njne {}", val_to_str(v))
         },
+        Instr::IJl(v) => {
+            format!("\njl {}", val_to_str(v))
+        },
         Instr::IJge(v) => {
             format!("\njge {}", val_to_str(v))
         },
@@ -755,9 +769,13 @@ fn val_to_str(v: &Val) -> String {
         Val::Reg(Reg::R15) => "r15".to_string(),
         Val::Imm(n) => n.to_string(),
         Val::RegOffset(Reg::RSP, offset) => format!("[rsp+{}]", offset),
+        Val::RegOffset(Reg::RAX, offset) => format!("[rax+{}]", offset),
+        Val::RegOffset(Reg::RBX, offset) => format!("[rbx+{}]", offset),
+        Val::RegOffset(Reg::RCX, offset) => format!("[rcx+{}]", offset),
         Val::RegOffset(Reg::R15, offset) => format!("[r15+{}]", offset),
+        Val::RegOffset(Reg::RDI, offset) => format!("[rdi+{}]", offset),
+        Val::RegOffset(Reg::AL, offset) => format!("[al+{}]", offset),
         Val::Label(s) => s.to_string(),
-        _ => panic!("not a valid Val"),
     }
 }
 

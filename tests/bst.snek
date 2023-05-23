@@ -1,0 +1,84 @@
+(fun (createNode val left right)
+    (tuple val left right)
+)
+
+(fun (getVal node)
+    (index node 0)
+)
+
+(fun (getLeft node)
+    (index node 1)
+)
+
+(fun (getRight node)
+    (index node 2)
+)
+
+(fun (insert val root)
+    (if (= root nil)
+        (createNode val nil nil)
+        (if (< val (getVal root))
+            (setindex! root 1 (insert val (getLeft root)))
+            (setindex! root 2 (insert val (getRight root)))
+        )
+    )
+)
+
+(fun (check val root)
+    (if (= root nil)
+        false
+        (let ((value (getVal root)))
+            (if (= val value)
+                true
+                (if (< val value)
+                    (check val (getLeft root))
+                    (check val (getRight root))
+                )
+            )
+        )
+    )
+)
+
+(block
+    (let (
+        (bst (insert 9 (insert 2 (insert 6 (insert 7 (insert 5 (insert 3 nil)))))))
+         )
+        (block
+            (print bst)
+            (print (check 2 bst))
+            (print (check 9 bst))
+            (print (check 10 bst))
+        )
+    )
+    (let (
+        (bst (insert 10 (insert 11 (insert 9 (insert 7 (insert 5 (insert 3 nil)))))))
+         )
+        (block
+            (print bst)
+            (print (check 3 bst))
+            (print (check 7 bst))
+            (print (check 10 bst))
+        )
+    )
+    (let (
+        (bst (insert 6 (insert 8 (insert 7 (insert 2 (insert 4 (insert 3 (insert 5 nil))))))))
+         )
+        (block
+            (print bst)
+            (print (check 2 bst))
+            (print (check 9 bst))
+            (print (check 10 bst))
+        )
+    )
+    (let (
+        (bst nil)
+         )
+        (block
+            (print bst)
+            (print (check 2 bst))
+            (print (check 9 bst))
+            (print (check 10 bst))
+        )
+    )
+    nil
+)

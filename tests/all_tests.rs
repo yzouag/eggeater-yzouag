@@ -8,6 +8,11 @@ success_tests! {
         file: "num.snek",
         expected: "644",
     },
+    {
+        name: false_val,
+        file: "false_val.snek",
+        expected: "false",
+    },
 
     // Input Expression
     {
@@ -124,6 +129,11 @@ success_tests! {
 
     // Let expressions
     {
+        name: let_and_set,
+        file: "let_and_set.snek",
+        expected: "6",
+    },
+    {
         name: binding0,
         file: "binding0.snek",
         expected: "5",
@@ -212,6 +222,40 @@ success_tests! {
 
     // If expressions
     {
+        name: isbool_isnum_1,
+        file: "isbool_isnum.snek",
+        input: "10",
+        expected: "true"
+    },
+    {
+        name: isbool_isnum_2,
+        file: "isbool_isnum.snek",
+        input: "true",
+        expected: "false"
+    },
+    {
+        name: input_compare_1,
+        file: "input_compare.snek",
+        input: "2",
+        expected: "false",
+    },
+    {
+        name: input_compare_2,
+        file: "input_compare.snek",
+        input: "10",
+        expected: "true",
+    },
+    {
+        name: condition,
+        file: "condition.snek",
+        expected: "true"
+    },
+    {
+        name: condition_2,
+        file: "condition_2.snek",
+        expected: "false"
+    },
+    {
         name: if_expr_succ0,
         file: "if_expr_succ0.snek",
         expected: "10",
@@ -235,6 +279,11 @@ success_tests! {
 
     // Set expr
     {
+        name: set,
+        file: "set.snek",
+        expected: "true"
+    },
+    {
         name: set_expr_succ0,
         file: "set_expr1.snek",
         expected: "true",
@@ -257,6 +306,24 @@ success_tests! {
         expected: "false",
     },
 
+    // loop expression
+    {
+        name: loop_1,
+        file: "loop_1.snek",
+        expected: "-6",
+    },
+    {
+        name: input_loop_1,
+        file: "input_loop.snek",
+        input: "-1",
+        expected: "1",
+    },
+    {
+        name: input_loop_2,
+        file: "input_loop.snek",
+        input: "4",
+        expected: "24",
+    },
     {
         name: loop_expr_succ0,
         file: "loop_expr0.snek",
@@ -274,6 +341,8 @@ success_tests! {
         file: "loop_expr1.snek",
         expected: "-6",
     },
+
+    // Call expression
     {
         name: fact,
         file: "fact.snek",
@@ -291,16 +360,6 @@ success_tests! {
         file: "even_odd.snek",
         input: "9",
         expected: "9\nfalse\nfalse",
-    },
-    {
-        name: let_depth,
-        file: "let_depth.snek",
-        expected: "5",
-    },
-    {
-        name: add_depth,
-        file: "add_depth.snek",
-        expected: "8",
     },
     {
         name: func_no_arg,
@@ -324,71 +383,69 @@ success_tests! {
         file: "func_many_call.snek",
         expected: "8\n9\n9\n9",
     },
+
+    // test depth
     {
-        name: false_val,
-        file: "false_val.snek",
-        expected: "false",
+        name: let_depth,
+        file: "let_depth.snek",
+        expected: "5",
     },
     {
-        name: input_compare_1,
-        file: "input_compare.snek",
-        input: "2",
-        expected: "false",
+        name: add_depth,
+        file: "add_depth.snek",
+        expected: "8",
+    },
+
+    // tuple expression
+    {
+        name: tuple,
+        file: "tuple.snek",
+        expected: "(1, 3, true, false)",
     },
     {
-        name: input_compare_2,
-        file: "input_compare.snek",
-        input: "10",
-        expected: "true",
+        name: tuple_nested,
+        file: "tuple_nested.snek",
+        expected: "(2, 3, (5, 8), (1, (3, 5)))",
     },
     {
-        name: let_and_set,
-        file: "let_and_set.snek",
-        expected: "6",
+        name: tuple_index,
+        file: "tuple_index.snek",
+        input: "1",
+        expected: "5",
     },
     {
-        name: loop_1,
-        file: "loop_1.snek",
-        expected: "-6",
+        name: tuple_index_nested,
+        file: "tuple_index_nested.snek",
+        expected: "8",
     },
     {
-        name: input_loop_1,
-        file: "input_loop.snek",
-        input: "-1",
-        expected: "1",
+        name: tuple_recursive,
+        file: "tuple_recursive.snek",
+        expected: "(2, 8, 5)",
+    },
+    // address, num, boolean equal
+    {
+        name: tuple_equal,
+        file: "tuple_equal.snek",
+        expected: "true\nfalse",
+    },
+    // print tuple
+    {
+        name: simple_example,
+        file: "simple_example.snek",
+        expected: "(2, 4, nil, false)\n((2, 4, nil, false), 2, 3)\n(2, 4, ((...), 2, 3), false)\n((2, 4, (...), false), 2, 3)\nnil\ntrue\nfalse",
     },
     {
-        name: input_loop_2,
-        file: "input_loop.snek",
-        input: "4",
-        expected: "24",
+        name: points_0,
+        file: "points.snek",
+        input: "1",
+        expected: "(7, 4)\n(-7, 13)\n(-9, 16)",
     },
     {
-        name: condition,
-        file: "condition.snek",
-        expected: "true"
-    },
-    {
-        name: condition_2,
-        file: "condition_2.snek",
-        expected: "false"
-    },
-    {
-        name: isbool_isnum_1,
-        file: "isbool_isnum.snek",
-        input: "10",
-        expected: "true"
-    },
-    {
-        name: isbool_isnum_2,
-        file: "isbool_isnum.snek",
-        input: "true",
-        expected: "false"
-    },
-    {
-        name: set,
-        file: "set.snek",
-        expected: "true"
+        name: points_1,
+        file: "points.snek",
+        input: "-8",
+        expected: "(7, -5)\n(-7, 13)\n(-9, 16)",
     },
 }
 
@@ -506,6 +563,41 @@ runtime_error_tests! {
     {
         name: condition_1,
         file: "condition_1.snek",
+        expected: "invalid argument",
+    },
+    // index out of bound
+    {
+        name: tuple_index_1,
+        file: "tuple_index.snek",
+        input: "2",
+        expected: "out of bound",
+    },
+    {
+        name: tuple_index_2,
+        file: "tuple_index.snek",
+        input: "-2",
+        expected: "out of bound",
+    },
+    {
+        name: error_bounds,
+        file: "error-bounds.snek",
+        expected: "out of bound",
+    },
+    // type mismatch
+    {
+        name: tuple_equal_fail,
+        file: "tuple_equal_fail.snek",
+        expected: "invalid argument",
+    },
+    {
+        name: error_tag,
+        file: "error-tag.snek",
+        expected: "invalid argument",
+    },
+    {
+        name: points_false,
+        file: "points.snek",
+        input: "true",
         expected: "invalid argument",
     },
 }
@@ -756,5 +848,11 @@ static_error_tests! {
         name: invalid_func,
         file: "invalid_func.snek",
         expected: "",
+    },
+    // tuple syntax
+    {
+        name: invalid_tuple,
+        file: "error3.snek",
+        expected: "Invalid",
     },
 }

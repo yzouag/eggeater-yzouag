@@ -1,0 +1,32 @@
+(fun (createPoint x y)
+    (tuple x y)
+)
+
+(fun (addPoints a b)
+    (tuple (+ (index a 0) (index b 0)) (+ (index a 1) (index b 1)))
+)
+
+(block
+    (let (
+            (a (createPoint 2 3))
+            (b (createPoint 5 input))
+        )
+        (print (addPoints a b))
+    )
+    (let (
+            (a (createPoint -2 3))
+            (b (createPoint -5 10))
+        )
+        (print (addPoints a b))
+    )
+    (let (
+            (a (createPoint -2 3))
+            (b (createPoint -5 10))
+        )
+        (let (
+                (c (addPoints a b))
+            )
+            (addPoints a c)
+        )
+    )
+)

@@ -1,0 +1,9 @@
+(let (
+        (m (tuple (= true false) (= 2 8) nil))
+        (n (tuple (= 3 8)))
+     )
+    (block
+        (print (= m m))
+        (= m false)
+    )
+)

@@ -1,0 +1,10 @@
+(let (
+        (a (tuple 2 3 5))
+        (b (tuple 1 a 2))
+     )
+    (block
+        (print b)
+        (print (index b 1))
+        (print (index (index b 1) 3))
+    )
+)
